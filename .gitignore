@@ -1,0 +1,16 @@
+# Python virtual envs
+venv/
+.venv/
+
+# Local Qdrant data
+qdrant_data/
+
+# Secrets
+.env
+
+# Other
+__pycache__/
+*.pyc
+
+#test Document
+Curiosity Research Paper.pdf

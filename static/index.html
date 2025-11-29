@@ -1,0 +1,130 @@
+# static/index.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Q&A System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold mb-8">Document Q&A System</h1>
+        
+        <!-- Upload Section -->
+        <div class="bg-white rounded-lg shadow p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4">Upload Document</h2>
+            <form id="uploadForm" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">PDF Document</label>
+                    <input type="file" accept=".pdf" id="documentInput" class="mt-1 block w-full" required>
+                </div>
+                <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                    Upload
+                </button>
+            </form>
+            <div id="uploadStatus" class="mt-4 hidden">
+                <div class="flex items-center">
+                    <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500 mr-2"></div>
+                    <span class="text-sm text-gray-600">Processing document...</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Query Section -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-xl font-semibold mb-4">Ask Questions</h2>
+            <form id="queryForm" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Your Question</label>
+                    <input type="text" id="questionInput" class="mt-1 block w-full border rounded-md p-2" required>
+                </div>
+                <button type="submit" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                    Ask
+                </button>
+            </form>
+            
+            <!-- Response Section -->
+            <div id="response" class="mt-8 hidden">
+                <h3 class="font-semibold mb-2">Answer:</h3>
+                <p id="answer" class="bg-gray-50 p-4 rounded"></p>
+                
+                <h3 class="font-semibold mt-4 mb-2">Relevant Context:</h3>
+                <div id="context" class="bg-gray-50 p-4 rounded text-sm"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000';
+
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fileInput = document.getElementById('documentInput');
+            const file = fileInput.files[0];
+            
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            const uploadStatus = document.getElementById('uploadStatus');
+            uploadStatus.classList.remove('hidden');
+
+            try {
+                const response = await fetch(`${API_URL}/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Upload failed');
+                }
+                
+                const data = await response.json();
+                uploadStatus.classList.add('hidden');
+                alert(`Document processed successfully! Document ID: ${data.doc_id}`);
+                fileInput.value = '';
+                
+            } catch (error) {
+                console.error('Error:', error);
+                alert(`Failed to upload document: ${error.message}`);
+                uploadStatus.classList.add('hidden');
+            }
+        });
+
+        document.getElementById('queryForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const question = document.getElementById('questionInput').value;
+            
+            try {
+                const response = await fetch(`${API_URL}/query`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ question })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Query failed');
+                }
+                
+                const data = await response.json();
+                
+                // Display response
+                document.getElementById('response').classList.remove('hidden');
+                document.getElementById('answer').textContent = data.answer;
+                document.getElementById('context').innerHTML = data.context
+                    .map((ctx, i) => `<div class="mb-2"><strong>Context ${i + 1}:</strong> ${ctx}</div>`)
+                    .join('');
+            } catch (error) {
+                console.error('Error:', error);
+                alert(`Failed to get answer: ${error.message}`);
+            }
+        });
+    </script>
+</body>
+</html>
