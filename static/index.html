@@ -14,28 +14,11 @@
         <!-- Top gradient bar -->
         <div class="h-1 bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500"></div>
 
-        <!-- Main content -->
-        <main class="flex-1 px-4 py-8 md:px-8">
-            <div class="max-w-5xl mx-auto">
-                <!-- Header -->
-                <header class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                        <h1 class="text-3xl md:text-4xl font-bold tracking-tight bg-gradient-to-r from-cyan-300 via-sky-400 to-indigo-400 bg-clip-text text-transparent">
-                            Document Q&A Studio
-                        </h1>
-                        <p class="mt-2 text-sm md:text-base text-slate-300">
-                            Upload a PDF, let the system build a knowledge base, and then ask natural language questions about it.
-                        </p>
-                    </div>
-                    <div class="flex items-center gap-3 text-xs md:text-sm text-slate-300">
-                        <span class="inline-flex h-2 w-2 rounded-full bg-emerald-400"></span>
-                        <span>Backend: FastAPI + Qdrant RAG</span>
-                    </div>
-                </header>
-
-                <!-- Layout: Upload + Chat -->
-                <section class="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1.2fr)]">
-                    <!-- Upload panel -->
+        <!-- Main content (full-height workspace: PDF viewer + chat take most of the screen) -->
+        <main class="flex-1 px-2 pt-2 pb-4 md:px-4 lg:px-8">
+            <div class="max-w-6xl xl:max-w-7xl 2xl:max-w-7xl mx-auto">
+                <!-- Layout state 1: Upload only (no document processed yet) -->
+                <section v-if="!lastDocId" class="grid gap-6">
                     <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 md:p-6 shadow-[0_18px_45px_rgba(15,23,42,0.8)]">
                         <div class="flex items-center justify-between mb-4">
                             <div>
