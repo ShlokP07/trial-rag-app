@@ -4,127 +4,423 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document Q&A System</title>
+    <title>Document Q&A Studio</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Vue 3 CDN (framework) -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
 </head>
-<body class="bg-gray-100 min-h-screen p-8">
-    <div class="max-w-4xl mx-auto">
-        <h1 class="text-3xl font-bold mb-8">Document Q&A System</h1>
-        
-        <!-- Upload Section -->
-        <div class="bg-white rounded-lg shadow p-6 mb-8">
-            <h2 class="text-xl font-semibold mb-4">Upload Document</h2>
-            <form id="uploadForm" class="space-y-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">PDF Document</label>
-                    <input type="file" accept=".pdf" id="documentInput" class="mt-1 block w-full" required>
-                </div>
-                <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
-                    Upload
-                </button>
-            </form>
-            <div id="uploadStatus" class="mt-4 hidden">
-                <div class="flex items-center">
-                    <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500 mr-2"></div>
-                    <span class="text-sm text-gray-600">Processing document...</span>
-                </div>
+<body class="bg-slate-950 min-h-screen text-slate-100">
+    <div id="app" class="min-h-screen flex flex-col">
+        <!-- Top gradient bar -->
+        <div class="h-1 bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500"></div>
+
+        <!-- Main content -->
+        <main class="flex-1 px-4 py-8 md:px-8">
+            <div class="max-w-5xl mx-auto">
+                <!-- Header -->
+                <header class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <h1 class="text-3xl md:text-4xl font-bold tracking-tight bg-gradient-to-r from-cyan-300 via-sky-400 to-indigo-400 bg-clip-text text-transparent">
+                            Document Q&A Studio
+                        </h1>
+                        <p class="mt-2 text-sm md:text-base text-slate-300">
+                            Upload a PDF, let the system build a knowledge base, and then ask natural language questions about it.
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-3 text-xs md:text-sm text-slate-300">
+                        <span class="inline-flex h-2 w-2 rounded-full bg-emerald-400"></span>
+                        <span>Backend: FastAPI + Qdrant RAG</span>
+                    </div>
+                </header>
+
+                <!-- Layout: Upload + Chat -->
+                <section class="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1.2fr)]">
+                    <!-- Upload panel -->
+                    <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 md:p-6 shadow-[0_18px_45px_rgba(15,23,42,0.8)]">
+                        <div class="flex items-center justify-between mb-4">
+                            <div>
+                                <h2 class="text-lg md:text-xl font-semibold text-slate-50 flex items-center gap-2">
+                                    <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-sky-500/20 text-sky-300 text-xs font-bold">1</span>
+                                    Upload document
+                                </h2>
+                                <p class="mt-1 text-xs md:text-sm text-slate-400">
+                                    Supported format: <span class="font-medium text-slate-200">PDF</span>. Larger files may take a bit longer to process.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 space-y-4">
+                            <!-- File drop zone -->
+                            <label
+                                class="relative flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-700 bg-slate-900/80 px-4 py-8 text-center transition hover:border-sky-500/60 hover:bg-slate-900 cursor-pointer"
+                            >
+                                <input
+                                    type="file"
+                                    accept=".pdf"
+                                    class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                                    @change="onFileChange"
+                                />
+                                <div class="flex flex-col items-center gap-2">
+                                    <div class="flex items-center justify-center h-10 w-10 rounded-full bg-sky-500/15 text-sky-300">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fill-rule="evenodd" d="M3 3a2 2 0 012-2h4.586A2 2 0 0111 1.586L14.414 5A2 2 0 0115 6.414V17a2 2 0 01-2 2H5a2 2 0 01-2-2V3zm7 9a1 1 0 10-2 0v2.586l-.293-.293a1 1 0 10-1.414 1.414l2.5 2.5a1 1 0 001.414 0l2.5-2.5a1 1 0 00-1.414-1.414L10 14.586V12z" clip-rule="evenodd" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm md:text-base font-medium text-slate-100">
+                                            Drop your PDF here or <span class="text-sky-300 underline underline-offset-4">browse</span>
+                                        </p>
+                                        <p class="mt-1 text-xs text-slate-400">
+                                            Max size depends on your server settings and OpenAI limits.
+                                        </p>
+                                    </div>
+                                </div>
+                            </label>
+
+                            <!-- Selected file info -->
+                            <div v-if="fileName" class="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-xs md:text-sm">
+                                <div class="flex items-center gap-2">
+                                    <span class="inline-flex h-6 w-6 items-center justify-center rounded-md bg-sky-500/20 text-sky-300">
+                                        PDF
+                                    </span>
+                                    <div>
+                                        <p class="font-medium text-slate-100 truncate max-w-[10rem] md:max-w-[16rem]" :title="fileName">
+                                            {{ fileName }}
+                                        </p>
+                                        <p class="text-[11px] text-slate-400">
+                                            {{ fileSizeLabel }}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    class="text-[11px] text-slate-400 hover:text-rose-300"
+                                    @click="clearFile"
+                                >
+                                    Clear
+                                </button>
+                            </div>
+
+                            <!-- Upload button + status -->
+                            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <button
+                                    type="button"
+                                    class="inline-flex items-center justify-center rounded-lg bg-sky-500 px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-sm shadow-sky-500/40 hover:bg-sky-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-300"
+                                    :disabled="!file || isUploading"
+                                    @click="uploadDocument"
+                                >
+                                    <span v-if="!isUploading" class="flex items-center gap-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                            <path d="M3 16a2 2 0 012-2h2v2H5a1 1 0 01-1-1zM9 16v-2h2v2H9zM15 16h-2v-2h2a1 1 0 011 1 1 1 0 01-1 1z" />
+                                            <path d="M7 9a3 3 0 016 0v1h1a2 2 0 110 4H6a2 2 0 010-4h1V9z" />
+                                        </svg>
+                                        Upload & index
+                                    </span>
+                                    <span v-else class="flex items-center gap-2">
+                                        <span class="h-4 w-4 border-2 border-slate-900 border-t-transparent rounded-full animate-spin"></span>
+                                        Processing…
+                                    </span>
+                                </button>
+
+                                <div class="flex-1 text-[11px] md:text-xs text-right text-slate-400">
+                                    <p v-if="lastDocId">
+                                        Last document ID:
+                                        <span class="font-mono text-slate-200">{{ lastDocId }}</span>
+                                    </p>
+                                    <p v-else>
+                                        Tip: you can keep uploading PDFs to enrich your knowledge base.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <!-- Upload feedback -->
+                            <p
+                                v-if="uploadMessage"
+                                class="mt-1 text-xs md:text-sm"
+                                :class="uploadError ? 'text-rose-300' : 'text-emerald-300'"
+                            >
+                                {{ uploadMessage }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Q&A panel -->
+                    <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 md:p-6 shadow-[0_18px_45px_rgba(15,23,42,0.8)] flex flex-col">
+                        <div class="flex items-center justify-between mb-4">
+                            <div>
+                                <h2 class="text-lg md:text-xl font-semibold text-slate-50 flex items-center gap-2">
+                                    <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold">2</span>
+                                    Ask questions
+                                </h2>
+                                <p class="mt-1 text-xs md:text-sm text-slate-400">
+                                    Ask anything about your uploaded documents. The system will search the vector store and synthesize an answer.
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Question input -->
+                        <form @submit.prevent="submitQuery" class="space-y-4">
+                            <div>
+                                <label class="block text-xs md:text-sm font-medium text-slate-200 mb-1.5">
+                                    Your question
+                                </label>
+                                <div class="relative">
+                                    <textarea
+                                        v-model="question"
+                                        rows="3"
+                                        class="w-full rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-2.5 text-sm text-slate-100 shadow-inner shadow-black/50 outline-none ring-1 ring-transparent transition placeholder:text-slate-500 focus:border-sky-500 focus:ring-sky-500/40"
+                                        placeholder="Example: “Summarize the main findings of the paper regarding curiosity-driven exploration.”"
+                                        required
+                                    ></textarea>
+                                    <button
+                                        type="submit"
+                                        class="absolute bottom-2.5 right-2.5 inline-flex items-center justify-center rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-slate-950 shadow-sm shadow-emerald-500/40 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-300"
+                                        :disabled="!question.trim() || isQuerying"
+                                    >
+                                        <span v-if="!isQuerying" class="flex items-center gap-1.5">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                                                <path d="M2.94 2.94a.75.75 0 01.82-.17l13 5a.75.75 0 010 1.38l-13 5A.75.75 0 012 13.5v-3.88l7-1.62-7-1.62V3.5a.75.75 0 01.94-.56z" />
+                                            </svg>
+                                            Ask
+                                        </span>
+                                        <span v-else class="flex items-center gap-1.5">
+                                            <span class="h-3 w-3 border-2 border-slate-900 border-t-transparent rounded-full animate-spin"></span>
+                                            Thinking…
+                                        </span>
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+
+                        <!-- Answer + context -->
+                        <div class="mt-5 space-y-4 flex-1 overflow-hidden">
+                            <!-- Answer card -->
+                            <div
+                                v-if="answer"
+                                class="rounded-xl border border-slate-800 bg-gradient-to-b from-slate-900/80 to-slate-950/80 p-4 text-sm md:text-[15px] text-slate-100 max-h-64 md:max-h-72 overflow-y-auto custom-scrollbar"
+                            >
+                                <div class="mb-2 flex items-center justify-between gap-2">
+                                    <h3 class="font-semibold text-slate-50 flex items-center gap-1.5">
+                                        <span class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                                        Answer
+                                    </h3>
+                                    <span class="text-[11px] text-slate-400">
+                                        Generated with OpenAI
+                                    </span>
+                                </div>
+                                <p class="whitespace-pre-line leading-relaxed">
+                                    {{ answer }}
+                                </p>
+                            </div>
+
+                            <div v-else class="rounded-xl border border-dashed border-slate-800 bg-slate-950/40 p-4 text-xs md:text-sm text-slate-400">
+                                Ask a question to see an answer here. We’ll show you exactly which chunks from your documents were used.
+                            </div>
+
+                            <!-- Context chips -->
+                            <div v-if="context.length" class="space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <h3 class="text-xs font-medium text-slate-300">
+                                        Retrieved context ({{ context.length }})
+                                    </h3>
+                                    <button
+                                        type="button"
+                                        class="text-[11px] text-slate-400 hover:text-slate-200"
+                                        @click="toggleContextExpanded"
+                                    >
+                                        {{ contextExpanded ? 'Collapse' : 'Expand all' }}
+                                    </button>
+                                </div>
+                                <div
+                                    class="rounded-xl border border-slate-800 bg-slate-950/50 p-3 max-h-40 md:max-h-44 overflow-y-auto space-y-2 text-[11px] md:text-xs custom-scrollbar"
+                                >
+                                    <article
+                                        v-for="(ctx, index) in context"
+                                        :key="index"
+                                        class="rounded-lg bg-slate-900/70 border border-slate-800 px-3 py-2"
+                                    >
+                                        <header class="mb-1.5 flex items-center justify-between gap-2">
+                                            <span class="inline-flex items-center gap-1 text-[11px] font-medium text-sky-200">
+                                                <span class="h-1.5 w-1.5 rounded-full bg-sky-400"></span>
+                                                Context {{ index + 1 }}
+                                            </span>
+                                            <span class="text-[10px] text-slate-500">
+                                                Chunk length: {{ ctx.length }}
+                                            </span>
+                                        </header>
+                                        <p
+                                            class="text-slate-200 leading-snug"
+                                            :class="!contextExpanded ? 'line-clamp-3' : ''"
+                                        >
+                                            {{ ctx }}
+                                        </p>
+                                    </article>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
             </div>
-        </div>
-        
-        <!-- Query Section -->
-        <div class="bg-white rounded-lg shadow p-6">
-            <h2 class="text-xl font-semibold mb-4">Ask Questions</h2>
-            <form id="queryForm" class="space-y-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Your Question</label>
-                    <input type="text" id="questionInput" class="mt-1 block w-full border rounded-md p-2" required>
-                </div>
-                <button type="submit" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
-                    Ask
-                </button>
-            </form>
-            
-            <!-- Response Section -->
-            <div id="response" class="mt-8 hidden">
-                <h3 class="font-semibold mb-2">Answer:</h3>
-                <p id="answer" class="bg-gray-50 p-4 rounded"></p>
-                
-                <h3 class="font-semibold mt-4 mb-2">Relevant Context:</h3>
-                <div id="context" class="bg-gray-50 p-4 rounded text-sm"></div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="border-t border-slate-800/80 bg-slate-950/90 backdrop-blur-md px-4 py-3 text-[11px] md:text-xs text-slate-400">
+            <div class="max-w-5xl mx-auto flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <span>
+                    Built with <span class="text-sky-300">FastAPI</span>, <span class="text-sky-300">Qdrant</span>, and <span class="text-sky-300">OpenAI</span>.
+                </span>
+                <span class="flex items-center gap-2">
+                    <span class="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+                    <span>Frontend: Tailwind + Vue (no build step)</span>
+                </span>
             </div>
-        </div>
+        </footer>
     </div>
 
     <script>
-        const API_URL = 'http://localhost:8000';
+        const { createApp } = Vue;
 
-        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const fileInput = document.getElementById('documentInput');
-            const file = fileInput.files[0];
-            
-            if (!file) return;
+        createApp({
+            data() {
+                return {
+                    apiUrl: window.location.origin, // works when served by FastAPI
+                    file: null,
+                    fileName: '',
+                    fileSize: 0,
+                    isUploading: false,
+                    uploadMessage: '',
+                    uploadError: false,
+                    lastDocId: '',
+                    question: '',
+                    isQuerying: false,
+                    answer: '',
+                    context: [],
+                    contextExpanded: false,
+                };
+            },
+            computed: {
+                fileSizeLabel() {
+                    if (!this.fileSize) return '';
+                    const kb = this.fileSize / 1024;
+                    if (kb < 1024) return `${kb.toFixed(1)} KB`;
+                    const mb = kb / 1024;
+                    return `${mb.toFixed(2)} MB`;
+                },
+            },
+            methods: {
+                onFileChange(event) {
+                    const files = event.target.files;
+                    if (!files || !files.length) {
+                        this.clearFile();
+                        return;
+                    }
+                    const file = files[0];
+                    if (!file.name.toLowerCase().endsWith('.pdf')) {
+                        this.uploadMessage = 'Only PDF files are supported.';
+                        this.uploadError = true;
+                        this.clearFile();
+                        return;
+                    }
+                    this.file = file;
+                    this.fileName = file.name;
+                    this.fileSize = file.size;
+                    this.uploadMessage = '';
+                    this.uploadError = false;
+                },
+                clearFile() {
+                    this.file = null;
+                    this.fileName = '';
+                    this.fileSize = 0;
+                    this.uploadMessage = '';
+                    this.uploadError = false;
+                },
+                async uploadDocument() {
+                    if (!this.file || this.isUploading) return;
+                    this.isUploading = true;
+                    this.uploadMessage = '';
+                    this.uploadError = false;
 
-            const formData = new FormData();
-            formData.append('file', file);
-            
-            const uploadStatus = document.getElementById('uploadStatus');
-            uploadStatus.classList.remove('hidden');
+                    const formData = new FormData();
+                    formData.append('file', this.file);
 
-            try {
-                const response = await fetch(`${API_URL}/upload`, {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.detail || 'Upload failed');
-                }
-                
-                const data = await response.json();
-                uploadStatus.classList.add('hidden');
-                alert(`Document processed successfully! Document ID: ${data.doc_id}`);
-                fileInput.value = '';
-                
-            } catch (error) {
-                console.error('Error:', error);
-                alert(`Failed to upload document: ${error.message}`);
-                uploadStatus.classList.add('hidden');
-            }
-        });
+                    try {
+                        const response = await fetch(`${this.apiUrl}/upload`, {
+                            method: 'POST',
+                            body: formData,
+                        });
 
-        document.getElementById('queryForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const question = document.getElementById('questionInput').value;
-            
-            try {
-                const response = await fetch(`${API_URL}/query`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ question })
-                });
-                
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.detail || 'Query failed');
-                }
-                
-                const data = await response.json();
-                
-                // Display response
-                document.getElementById('response').classList.remove('hidden');
-                document.getElementById('answer').textContent = data.answer;
-                document.getElementById('context').innerHTML = data.context
-                    .map((ctx, i) => `<div class="mb-2"><strong>Context ${i + 1}:</strong> ${ctx}</div>`)
-                    .join('');
-            } catch (error) {
-                console.error('Error:', error);
-                alert(`Failed to get answer: ${error.message}`);
-            }
-        });
+                        const data = await response.json().catch(() => ({}));
+
+                        if (!response.ok) {
+                            const detail = data && data.detail ? data.detail : 'Upload failed';
+                            throw new Error(detail);
+                        }
+
+                        this.lastDocId = data.doc_id || '';
+                        this.uploadMessage = 'Document processed successfully and added to the vector store.';
+                        this.uploadError = false;
+                        this.clearFile();
+                    } catch (error) {
+                        console.error('Upload error:', error);
+                        this.uploadMessage = `Failed to upload document: ${error.message || error}`;
+                        this.uploadError = true;
+                    } finally {
+                        this.isUploading = false;
+                    }
+                },
+                async submitQuery() {
+                    if (!this.question.trim() || this.isQuerying) return;
+                    this.isQuerying = true;
+                    this.answer = '';
+                    this.context = [];
+
+                    try {
+                        const response = await fetch(`${this.apiUrl}/query`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ question: this.question.trim() }),
+                        });
+
+                        const data = await response.json().catch(() => ({}));
+
+                        if (!response.ok) {
+                            const detail = data && data.detail ? data.detail : 'Query failed';
+                            throw new Error(detail);
+                        }
+
+                        this.answer = data.answer || '';
+                        this.context = Array.isArray(data.context) ? data.context : [];
+                    } catch (error) {
+                        console.error('Query error:', error);
+                        this.answer = `Error: ${error.message || error}`;
+                        this.context = [];
+                    } finally {
+                        this.isQuerying = false;
+                    }
+                },
+                toggleContextExpanded() {
+                    this.contextExpanded = !this.contextExpanded;
+                },
+            },
+        }).mount('#app');
     </script>
+
+    <style>
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.9);
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(51, 65, 85, 0.9);
+            border-radius: 9999px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: rgba(71, 85, 105, 0.95);
+        }
+    </style>
 </body>
 </html>
