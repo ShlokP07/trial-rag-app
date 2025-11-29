@@ -12,8 +12,13 @@ from datetime import datetime, UTC
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import io
+
+# Directory where we persist original PDFs so the frontend can display them
+DOCUMENTS_DIR = os.path.join(os.path.dirname(__file__), "documents")
+os.makedirs(DOCUMENTS_DIR, exist_ok=True)
 
 # Load environment variables
 load_dotenv()
@@ -90,8 +95,15 @@ class QdrantRAG:
             # Generate document ID
             doc_id = str(uuid.uuid4())
             
-            # Read and process PDF
+            # Read PDF bytes
             content = await file.read()
+
+            # Persist original PDF on disk so it can be viewed later
+            pdf_path = os.path.join(DOCUMENTS_DIR, f"{doc_id}.pdf")
+            with open(pdf_path, "wb") as f:
+                f.write(content)
+
+            # Extract text for RAG
             text = self.process_pdf(content)
             print(f"Extracted {len(text)} characters from PDF")
             
@@ -174,6 +186,15 @@ async def upload_document(file: UploadFile):
         "message": "Document processed successfully",
         "doc_id": doc_id
     }
+
+
+@app.get("/documents/{doc_id}.pdf")
+async def get_document(doc_id: str):
+    """Serve the original uploaded PDF so the frontend can display it."""
+    pdf_path = os.path.join(DOCUMENTS_DIR, f"{doc_id}.pdf")
+    if not os.path.exists(pdf_path):
+        raise HTTPException(status_code=404, detail="Not Found")
+    return FileResponse(pdf_path, media_type="application/pdf")
 
 @app.post("/query")
 async def query_documents(query: Query):

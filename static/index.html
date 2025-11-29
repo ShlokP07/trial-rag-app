@@ -126,9 +126,45 @@
                             </p>
                         </div>
                     </div>
+                </section>
+
+                <!-- Layout state 2: PDF viewer + Q&A once a document is processed -->
+                <section
+                    v-else
+                    class="grid gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1.25fr)] min-h-[80vh]"
+                >
+                    <!-- Left column: PDF viewer -->
+                    <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 md:p-5 shadow-[0_18px_45px_rgba(15,23,42,0.8)] min-h-[80vh]">
+                        <div class="flex items-center justify-between mb-3">
+                            <div>
+                                <h2 class="text-sm md:text-base font-semibold text-slate-50 flex items-center gap-2">
+                                    <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-violet-500/20 text-violet-300 text-xs font-bold">1</span>
+                                    PDF viewer
+                                </h2>
+                                <p class="mt-1 text-[11px] md:text-xs text-slate-400">
+                                    See the original paper and jump to the exact page used for each answer.
+                                </p>
+                                <p class="mt-1 text-[10px] text-slate-500 break-all">
+                                    <span class="font-semibold">Doc ID:</span>
+                                    <span class="font-mono">{{ lastDocId }}</span>
+                                </p>
+                            </div>
+                        </div>
+
+                        <div v-if="pdfUrl" class="border border-slate-800/80 rounded-xl overflow-hidden bg-slate-950/80">
+                            <iframe
+                                :src="pdfUrl"
+                                title="PDF viewer"
+                                class="w-full h-[72vh] md:h-[78vh] bg-slate-900"
+                            ></iframe>
+                        </div>
+                        <div v-else class="rounded-xl border border-dashed border-slate-800 bg-slate-950/40 p-4 text-[11px] md:text-xs text-slate-400">
+                            PDF is ready, but the viewer URL is missing. Try refreshing the page or re-uploading the document.
+                        </div>
+                    </div>
 
                     <!-- Q&A panel -->
-                    <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 md:p-6 shadow-[0_18px_45px_rgba(15,23,42,0.8)] flex flex-col">
+                    <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 md:p-6 shadow-[0_18px_45px_rgba(15,23,42,0.8)] flex flex-col min-h-[80vh]">
                         <div class="flex items-center justify-between mb-4">
                             <div>
                                 <h2 class="text-lg md:text-xl font-semibold text-slate-50 flex items-center gap-2">
@@ -151,7 +187,7 @@
                                     <textarea
                                         v-model="question"
                                         rows="3"
-                                        class="w-full rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-2.5 text-sm text-slate-100 shadow-inner shadow-black/50 outline-none ring-1 ring-transparent transition placeholder:text-slate-500 focus:border-sky-500 focus:ring-sky-500/40"
+                                        class="w-full rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-2.5 text-sm text-slate-100 shadow-inner shadow-black/50 outline-none ring-1 ring-transparent transition placeholder:text-slate-500 focus:border-sky-500 focus:ring-sky-500/40 resize-none"
                                         placeholder="Example: “Summarize the main findings of the paper regarding curiosity-driven exploration.”"
                                         required
                                     ></textarea>
@@ -180,7 +216,7 @@
                             <!-- Answer card -->
                             <div
                                 v-if="answer"
-                                class="rounded-xl border border-slate-800 bg-gradient-to-b from-slate-900/80 to-slate-950/80 p-4 text-sm md:text-[15px] text-slate-100 max-h-64 md:max-h-72 overflow-y-auto custom-scrollbar"
+                                class="rounded-xl border border-slate-800 bg-gradient-to-b from-slate-900/80 to-slate-950/80 p-4 text-sm md:text-[15px] text-slate-100 max-h-[40vh] md:max-h-[45vh] overflow-y-auto custom-scrollbar"
                             >
                                 <div class="mb-2 flex items-center justify-between gap-2">
                                     <h3 class="font-semibold text-slate-50 flex items-center gap-1.5">
@@ -215,27 +251,33 @@
                                     </button>
                                 </div>
                                 <div
-                                    class="rounded-xl border border-slate-800 bg-slate-950/50 p-3 max-h-40 md:max-h-44 overflow-y-auto space-y-2 text-[11px] md:text-xs custom-scrollbar"
+                                    class="rounded-xl border border-slate-800 bg-slate-950/50 p-3 max-h-[22vh] md:max-h-[24vh] overflow-y-auto space-y-2 text-[11px] md:text-xs custom-scrollbar"
                                 >
                                     <article
                                         v-for="(ctx, index) in context"
                                         :key="index"
-                                        class="rounded-lg bg-slate-900/70 border border-slate-800 px-3 py-2"
+                                        class="rounded-lg bg-slate-900/70 border border-slate-800 px-3 py-2 cursor-pointer hover:border-sky-500/70 hover:bg-slate-900/90 transition"
+                                        @click="goToPage(ctx)"
                                     >
                                         <header class="mb-1.5 flex items-center justify-between gap-2">
                                             <span class="inline-flex items-center gap-1 text-[11px] font-medium text-sky-200">
                                                 <span class="h-1.5 w-1.5 rounded-full bg-sky-400"></span>
                                                 Context {{ index + 1 }}
                                             </span>
-                                            <span class="text-[10px] text-slate-500">
-                                                Chunk length: {{ ctx.length }}
-                                            </span>
+                                            <div class="flex items-center gap-2 text-[10px] text-slate-500">
+                                                <span v-if="ctx.page">
+                                                    Page {{ ctx.page }}
+                                                </span>
+                                                <span class="hidden md:inline" v-if="ctx.doc_id">
+                                                    • Doc: <span class="font-mono">{{ ctx.doc_id.slice(0, 8) }}…</span>
+                                                </span>
+                                            </div>
                                         </header>
                                         <p
                                             class="text-slate-200 leading-snug"
                                             :class="!contextExpanded ? 'line-clamp-3' : ''"
                                         >
-                                            {{ ctx }}
+                                            {{ ctx.text || ctx }}
                                         </p>
                                     </article>
                                 </div>
@@ -274,6 +316,7 @@
                     uploadMessage: '',
                     uploadError: false,
                     lastDocId: '',
+                    pdfUrl: '',
                     question: '',
                     isQuerying: false,
                     answer: '',
@@ -317,6 +360,10 @@
                     this.uploadMessage = '';
                     this.uploadError = false;
                 },
+                getPdfUrl(docId) {
+                    if (!docId) return '';
+                    return `${this.apiUrl}/documents/${docId}.pdf`;
+                },
                 async uploadDocument() {
                     if (!this.file || this.isUploading) return;
                     this.isUploading = true;
@@ -340,6 +387,7 @@
                         }
 
                         this.lastDocId = data.doc_id || '';
+                        this.pdfUrl = this.getPdfUrl(this.lastDocId);
                         this.uploadMessage = 'Document processed successfully and added to the vector store.';
                         this.uploadError = false;
                         this.clearFile();
@@ -385,6 +433,14 @@
                 },
                 toggleContextExpanded() {
                     this.contextExpanded = !this.contextExpanded;
+                },
+                goToPage(ctx) {
+                    if (!ctx) return;
+                    const page = ctx.page || 1;
+                    const docId = ctx.doc_id || this.lastDocId;
+                    if (!docId) return;
+
+                    this.pdfUrl = `${this.getPdfUrl(docId)}#page=${page}`;
                 },
             },
         }).mount('#app');
