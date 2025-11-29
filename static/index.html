@@ -152,6 +152,7 @@
 
                         <div v-if="pdfUrl" class="border border-slate-800/80 rounded-xl overflow-hidden bg-slate-950/80">
                             <iframe
+                                :key="pdfUrl"
                                 :src="pdfUrl"
                                 title="PDF viewer"
                                 class="w-full h-[72vh] md:h-[78vh] bg-slate-900"
@@ -445,7 +446,22 @@
                     const docId = ctx.doc_id || this.lastDocId;
                     if (!docId) return;
 
-                    this.pdfUrl = `${this.getPdfUrl(docId)}#page=${page}`;
+                    // Extract a meaningful search phrase from the context (first 3-5 words)
+                    const rawText = typeof ctx === 'string' ? ctx : (ctx.text || '');
+                    const words = rawText.trim().split(/\s+/).filter(w => w.length > 2).slice(0, 5);
+                    const searchPhrase = words.join(' ');
+                    
+                    // Build URL with page and search parameters
+                    // Add a timestamp to force iframe reload when hash changes
+                    const baseUrl = this.getPdfUrl(docId);
+                    const timestamp = Date.now();
+                    let newUrl = `${baseUrl}?t=${timestamp}#page=${page}`;
+                    if (searchPhrase) {
+                        newUrl += `&search=${encodeURIComponent(searchPhrase)}`;
+                    }
+                    
+                    // Update Vue data - the :key on iframe will force a complete reload
+                    this.pdfUrl = newUrl;
                 },
             },
         }).mount('#app');

@@ -3,7 +3,7 @@ import os
 from openai import OpenAI
 from dotenv import load_dotenv
 import PyPDF2
-from typing import List, Dict
+from typing import List, Dict, Any
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
@@ -74,17 +74,44 @@ class QdrantRAG:
         )
         return response.data[0].embedding
 
-    def process_pdf(self, content: bytes) -> str:
-        """Extract text from PDF content"""
+    def process_pdf(self, content: bytes) -> List[Dict]:
+        """Extract text from PDF content and preserve page boundaries.
+        
+        Returns:
+            List of dicts: { "page_number": int, "text": str }
+        """
         try:
             pdf_file = io.BytesIO(content)
             pdf_reader = PyPDF2.PdfReader(pdf_file)
-            text = ""
-            for page in pdf_reader.pages:
-                text += page.extract_text()
-            return text
+            pages = []
+            for page_number, page in enumerate(pdf_reader.pages, start=1):
+                page_text = page.extract_text() or ""
+                pages.append({
+                    "page_number": page_number,
+                    "text": page_text,
+                })
+            return pages
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
+
+    def clear_collection(self):
+        """Clear all documents from the Qdrant collection before uploading a new one"""
+        try:
+            # Delete the entire collection
+            self.qdrant.delete_collection('documents')
+            print("Cleared existing collection")
+        except Exception as e:
+            print(f"Note: Collection may not exist yet: {e}")
+        
+        # Recreate the collection
+        self.qdrant.create_collection(
+            collection_name='documents',
+            vectors_config=models.VectorParams(
+                size=1536,  # OpenAI embedding dimension
+                distance=models.Distance.COSINE
+            )
+        )
+        print("Created fresh collection")
 
     async def process_document(self, file: UploadFile) -> str:
         """Process document: extract text, split into chunks, and store in Qdrant"""
@@ -92,6 +119,9 @@ class QdrantRAG:
             raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
         try:
+            # Clear old embeddings before processing new document
+            self.clear_collection()
+            
             # Generate document ID
             doc_id = str(uuid.uuid4())
             
@@ -103,42 +133,62 @@ class QdrantRAG:
             with open(pdf_path, "wb") as f:
                 f.write(content)
 
-            # Extract text for RAG
-            text = self.process_pdf(content)
-            print(f"Extracted {len(text)} characters from PDF")
+            # Extract text for RAG (with page info)
+            pages = self.process_pdf(content)
+            total_chars = sum(len(p["text"]) for p in pages)
+            print(f"Extracted {total_chars} characters from PDF across {len(pages)} pages")
             
-            # Split text into chunks
-            chunks = self.text_splitter.split_text(text)
-            print(f"Split into {len(chunks)} chunks")
-            
-            # Process chunks and store in Qdrant
-            for i, chunk in enumerate(chunks):
-                print(f"Processing chunk {i+1}/{len(chunks)}")
-                embedding = self.get_embedding(chunk)
-                point_id = str(uuid.uuid4())
+            # Split each page into chunks and store with page metadata
+            global_chunk_index = 0
+            for page in pages:
+                page_number = page["page_number"]
+                page_text = page["text"]
                 
-                # Store in Qdrant
-                self.qdrant.upsert(
-                    collection_name="documents",
-                    points=[models.PointStruct(
-                        id=point_id,
-                        vector=embedding,
-                        payload={
-                            "doc_id": doc_id,
-                            "chunk_index": i,
-                            "text": chunk,
-                            "timestamp": datetime.now(UTC).isoformat()
-                        }
-                    )]
-                )
+                if not page_text.strip():
+                    continue
+                
+                page_chunks = self.text_splitter.split_text(page_text)
+                print(f"Page {page_number}: split into {len(page_chunks)} chunks")
+                
+                for local_idx, chunk in enumerate(page_chunks):
+                    embedding = self.get_embedding(chunk)
+                    point_id = str(uuid.uuid4())
+                    
+                    # Store in Qdrant with page metadata
+                    self.qdrant.upsert(
+                        collection_name="documents",
+                        points=[models.PointStruct(
+                            id=point_id,
+                            vector=embedding,
+                            payload={
+                                "doc_id": doc_id,
+                                "page": page_number,
+                                "chunk_index": global_chunk_index,
+                                "page_chunk_index": local_idx,
+                                "text": chunk,
+                                "timestamp": datetime.now(UTC).isoformat()
+                            }
+                        )]
+                    )
+                    global_chunk_index += 1
             
             return doc_id
             
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
-    def find_relevant_chunks(self, query: str, top_k: int = 5) -> List[str]:
-        """Find the most relevant chunks for a query using Qdrant"""
+    def find_relevant_chunks(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+        """Find the most relevant chunks for a query using Qdrant.
+        
+        Returns a list of dicts:
+        {
+            "text": str,
+            "doc_id": str | None,
+            "page": int | None,
+            "chunk_index": int | None,
+            "score": float | None,
+        }
+        """
         query_embedding = self.get_embedding(query)
         
         search_results = self.qdrant.search(
@@ -148,13 +198,27 @@ class QdrantRAG:
             with_payload=True
         )
 
+        formatted_results = []
+        for result in search_results:
+            payload = result.payload or {}
+            text = payload.get("text", "")
+            if not text:
+                continue
+            
+            formatted_results.append({
+                "text": text,
+                "doc_id": payload.get("doc_id"),
+                "page": payload.get("page"),
+                "chunk_index": payload.get("chunk_index"),
+                "score": float(getattr(result, "score", 0.0)),
+            })
         
-        return [result.payload['text'] for result in search_results]
+        return formatted_results
 
     def answer_question(self, question: str) -> Dict:
         """Answer a question using relevant chunks and GPT"""
         relevant_chunks = self.find_relevant_chunks(question)
-        context = "\n\n".join(relevant_chunks)
+        context = "\n\n".join(chunk["text"] for chunk in relevant_chunks if chunk.get("text"))
         
         messages = [
             {"role": "system", "content": """You are a helpful assistant that provides accurate, well-structured answers based on the given context. 
@@ -172,7 +236,7 @@ class QdrantRAG:
         
         return {
             "answer": response.choices[0].message.content,
-            "context": relevant_chunks
+            "context": relevant_chunks  # Return full objects with page/doc_id
         }
 
 # Initialize RAG system
