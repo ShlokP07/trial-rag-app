@@ -43,7 +43,11 @@ class QdrantRAG:
         )
         
         # Initialize Qdrant client
-        self.qdrant = QdrantClient(path="./qdrant_data")
+        # In Docker, we'll connect to the official Qdrant container via host/port.
+        # Locally (without Docker), you can still point this to a local Qdrant instance.
+        qdrant_host = os.getenv("QDRANT_HOST", "localhost")
+        qdrant_port = int(os.getenv("QDRANT_PORT", "6333"))
+        self.qdrant = QdrantClient(host=qdrant_host, port=qdrant_port)
         
         # Create collection if it doesn't exist
         try:
