@@ -131,24 +131,23 @@
                 <!-- Layout state 2: PDF viewer + Q&A once a document is processed -->
                 <section
                     v-else
-                    class="grid gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1.25fr)] min-h-[80vh]"
+                    class="grid gap-4 lg:gap-6 min-h-[80vh]"
+                    :class="chatCollapsed ? '' : 'lg:grid-cols-[minmax(0,4fr)_minmax(0,1fr)]'"
                 >
                     <!-- Left column: PDF viewer -->
-                    <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 md:p-5 shadow-[0_18px_45px_rgba(15,23,42,0.8)] min-h-[80vh]">
-                        <div class="flex items-center justify-between mb-3">
-                            <div>
-                                <h2 class="text-sm md:text-base font-semibold text-slate-50 flex items-center gap-2">
-                                    <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-violet-500/20 text-violet-300 text-xs font-bold">1</span>
-                                    PDF viewer
-                                </h2>
-                                <p class="mt-1 text-[11px] md:text-xs text-slate-400">
-                                    See the original paper and jump to the exact page used for each answer.
-                                </p>
-                                <p class="mt-1 text-[10px] text-slate-500 break-all">
-                                    <span class="font-semibold">Doc ID:</span>
-                                    <span class="font-mono">{{ lastDocId }}</span>
-                                </p>
+                    <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-3 md:p-4 shadow-[0_18px_45px_rgba(15,23,42,0.8)] min-h-[80vh]">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="text-xs text-slate-500">
+                                <!-- minimal, no title/doc id -->
                             </div>
+                            <button
+                                type="button"
+                                class="hidden lg:inline-flex items-center gap-1.5 rounded-full border border-slate-700/80 bg-slate-900/60 px-3 py-1 text-[11px] text-slate-300 hover:border-sky-500/70 hover:text-sky-200"
+                                @click="toggleChatCollapsed"
+                            >
+                                <span v-if="!chatCollapsed">Collapse chat</span>
+                                <span v-else>Show chat</span>
+                            </button>
                         </div>
 
                         <div v-if="pdfUrl" class="border border-slate-800/80 rounded-xl overflow-hidden bg-slate-950/80">
@@ -164,21 +163,12 @@
                     </div>
 
                     <!-- Q&A panel -->
-                    <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 md:p-6 shadow-[0_18px_45px_rgba(15,23,42,0.8)] flex flex-col min-h-[80vh]">
-                        <div class="flex items-center justify-between mb-4">
-                            <div>
-                                <h2 class="text-lg md:text-xl font-semibold text-slate-50 flex items-center gap-2">
-                                    <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold">2</span>
-                                    Ask questions
-                                </h2>
-                                <p class="mt-1 text-xs md:text-sm text-slate-400">
-                                    Ask anything about your uploaded documents. The system will search the vector store and synthesize an answer.
-                                </p>
-                            </div>
-                        </div>
-
+                    <div
+                        v-if="!chatCollapsed"
+                        class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 md:p-5 shadow-[0_18px_45px_rgba(15,23,42,0.8)] flex flex-col min-h-[80vh]"
+                    >
                         <!-- Question input -->
-                        <form @submit.prevent="submitQuery" class="space-y-4">
+                        <form @submit.prevent="submitQuery" class="space-y-3">
                             <div>
                                 <label class="block text-xs md:text-sm font-medium text-slate-200 mb-1.5">
                                     Your question
@@ -284,6 +274,16 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- When chat is collapsed, show a floating button to reopen it on smaller screens -->
+                    <button
+                        v-if="chatCollapsed"
+                        type="button"
+                        class="fixed bottom-4 right-4 z-20 inline-flex items-center gap-1.5 rounded-full bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-slate-950 shadow-lg shadow-emerald-500/40 hover:bg-emerald-400"
+                        @click="toggleChatCollapsed"
+                    >
+                        Open chat
+                    </button>
                 </section>
             </div>
         </main>
@@ -317,6 +317,7 @@
                     uploadError: false,
                     lastDocId: '',
                     pdfUrl: '',
+                    chatCollapsed: false,
                     question: '',
                     isQuerying: false,
                     answer: '',
@@ -388,6 +389,7 @@
 
                         this.lastDocId = data.doc_id || '';
                         this.pdfUrl = this.getPdfUrl(this.lastDocId);
+                        this.chatCollapsed = false;
                         this.uploadMessage = 'Document processed successfully and added to the vector store.';
                         this.uploadError = false;
                         this.clearFile();
@@ -433,6 +435,9 @@
                 },
                 toggleContextExpanded() {
                     this.contextExpanded = !this.contextExpanded;
+                },
+                toggleChatCollapsed() {
+                    this.chatCollapsed = !this.chatCollapsed;
                 },
                 goToPage(ctx) {
                     if (!ctx) return;
