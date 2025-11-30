@@ -214,27 +214,172 @@ class QdrantRAG:
         
         return formatted_results
 
+    def _format_context_with_metadata(self, chunks: List[Dict[str, Any]]) -> str:
+        """Format context chunks with page numbers and metadata for better reference"""
+        formatted_parts = []
+        for idx, chunk in enumerate(chunks, 1):
+            page = chunk.get("page", "?")
+            text = chunk.get("text", "")
+            score = chunk.get("score", 0.0)
+            formatted_parts.append(
+                f"[Context {idx} - Page {page} (Relevance: {score:.2f})]\n{text}"
+            )
+        return "\n\n---\n\n".join(formatted_parts)
+    
+    def _extract_answer_only(self, full_response: str) -> str:
+        """Extract only the answer section from COT response, removing reasoning steps"""
+        # Try to find the "Answer:" section
+        answer_markers = [
+            "**Answer:**",
+            "**Answer:**\n",
+            "Answer:",
+            "Answer:\n",
+            "## Answer",
+            "## Answer\n"
+        ]
+        
+        full_response_lower = full_response.lower()
+        
+        # Try each marker
+        for marker in answer_markers:
+            marker_lower = marker.lower()
+            if marker_lower in full_response_lower:
+                # Find the position (case-insensitive)
+                idx = full_response_lower.find(marker_lower)
+                if idx != -1:
+                    # Get the actual marker with original case
+                    actual_marker = full_response[idx:idx+len(marker)]
+                    # Extract everything after the marker
+                    answer_start = idx + len(actual_marker)
+                    answer_text = full_response[answer_start:].strip()
+                    
+                    # Remove any trailing "Reasoning:" sections if they appear after
+                    if "**reasoning:**" in answer_text.lower():
+                        reasoning_idx = answer_text.lower().find("**reasoning:**")
+                        answer_text = answer_text[:reasoning_idx].strip()
+                    
+                    if answer_text:
+                        return answer_text
+        
+        # If no answer marker found, try to find content after "Reasoning:"
+        reasoning_markers = ["**Reasoning:**", "**Reasoning:**\n", "Reasoning:", "Reasoning:\n"]
+        for marker in reasoning_markers:
+            marker_lower = marker.lower()
+            if marker_lower in full_response_lower:
+                idx = full_response_lower.find(marker_lower)
+                if idx != -1:
+                    # Look for answer after reasoning
+                    after_reasoning = full_response[idx + len(marker):]
+                    # Try to find answer section in the remaining text
+                    for answer_marker in answer_markers:
+                        answer_marker_lower = answer_marker.lower()
+                        if answer_marker_lower in after_reasoning.lower():
+                            answer_idx = after_reasoning.lower().find(answer_marker_lower)
+                            actual_marker = after_reasoning[answer_idx:answer_idx+len(answer_marker)]
+                            answer_start = answer_idx + len(actual_marker)
+                            answer_text = after_reasoning[answer_start:].strip()
+                            if answer_text:
+                                return answer_text
+        
+        # Fallback: if no structured format found, return the full response
+        # (might be a direct answer without reasoning section)
+        return full_response.strip()
+    
     def answer_question(self, question: str) -> Dict:
-        """Answer a question using relevant chunks and GPT"""
+        """Answer a question using relevant chunks and GPT with Chain of Thought prompting"""
         relevant_chunks = self.find_relevant_chunks(question)
-        context = "\n\n".join(chunk["text"] for chunk in relevant_chunks if chunk.get("text"))
+        
+        if not relevant_chunks:
+            return {
+                "answer": "I couldn't find any relevant information in the document to answer this question. Please try rephrasing your question or ensure a document has been uploaded.",
+                "context": []
+            }
+        
+        # Format context with page numbers and metadata
+        formatted_context = self._format_context_with_metadata(relevant_chunks)
+        
+        # Enhanced Chain of Thought system prompt
+        system_prompt = """You are an expert document analysis assistant. Your task is to answer questions based on the provided document context using Chain of Thought reasoning.
+
+Follow this step-by-step process:
+
+1. **Understand the Question**: Carefully read and understand what is being asked. Identify key concepts, entities, and the type of answer expected.
+
+2. **Analyze the Context**: 
+   - Review each context chunk provided (they are numbered and include page references)
+   - Identify which chunks are most relevant to the question
+   - Note any relationships or connections between different chunks
+   - Pay attention to page numbers for source tracking
+
+3. **Extract Relevant Information**:
+   - Extract specific facts, data, or statements from the context that relate to the question
+   - If information appears in multiple chunks, synthesize it coherently
+   - Distinguish between main points and supporting details
+
+4. **Reason Through the Answer**:
+   - Think step by step about how the extracted information answers the question
+   - If the question requires inference, explain your reasoning process
+   - If information is incomplete, identify what can and cannot be answered
+
+5. **Formulate the Answer**:
+   - Provide a clear, well-structured answer
+   - Use the exact terminology and phrasing from the document when possible
+   - Include page references (e.g., "According to page X...") when citing specific information
+   - If synthesizing from multiple pages, mention the relevant pages
+
+6. **Verify Accuracy**:
+   - Ensure your answer is directly supported by the provided context
+   - Do not add information not present in the context
+   - If the context doesn't fully answer the question, clearly state the limitations
+
+**Important Guidelines**:
+- Base your answer ONLY on the provided context chunks
+- If the answer cannot be found in the context, explicitly state this
+- Maintain technical accuracy and preserve the original meaning
+- Use clear, professional language
+- Structure longer answers with paragraphs or bullet points when appropriate"""
+
+        # User prompt with Chain of Thought structure
+        user_prompt = f"""Please answer the following question using Chain of Thought reasoning.
+
+**Document Context:**
+{formatted_context}
+
+**Question:** {question}
+
+**Instructions:**
+Think through your answer step by step:
+1. First, identify which context chunks are most relevant
+2. Extract the key information needed to answer the question
+3. Reason through how this information answers the question
+4. Formulate your final answer with proper citations to page numbers
+
+Provide your answer in the following format:
+
+**Reasoning:**
+[Your step-by-step analysis here]
+
+**Answer:**
+[Your final, well-structured answer here with page references when applicable]"""
         
         messages = [
-            {"role": "system", "content": """You are a helpful assistant that provides accurate, well-structured answers based on the given context. 
-             If the answer cannot be fully found in the context, be clear about what you can and cannot answer. 
-             Synthesize information from multiple chunks when necessary, and maintain the technical accuracy of the source material."""},
-            {"role": "user", "content": f"Context: {context}\n\nQuestion: {question}"}
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
         ]
         
         response = self.client.chat.completions.create(
             model="gpt-4o-mini-2024-07-18",
             messages=messages,
-            temperature=0.7,
-            max_tokens=500
+            temperature=0.3,  # Lower temperature for more focused, consistent reasoning
+            max_tokens=1000  # Increased to accommodate reasoning steps
         )
         
+        # Extract only the answer section, removing reasoning steps
+        full_response = response.choices[0].message.content
+        clean_answer = self._extract_answer_only(full_response)
+        
         return {
-            "answer": response.choices[0].message.content,
+            "answer": clean_answer,
             "context": relevant_chunks  # Return full objects with page/doc_id
         }
 
